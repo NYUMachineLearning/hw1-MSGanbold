@@ -1,0 +1,34 @@
+---
+title: "K-means Animation function"
+author: "Ganbold, MungunSarnai"
+date: "9/12/2019"
+output: html_document
+---
+
+# Optional working extension to the 'hw1_Ganbold_Mungunsarnai.rmd':
+
+Clustering and vizualizing with kmeans.ani(), k=2:
+
+
+```{r}
+data(iris)
+iris_clust <- as.data.frame(iris[,-5])
+
+#install.packages("animation")
+set.seed(2345)
+library(animation)
+clusters_2 <- kmeans.ani(iris_clust[2:3], 2)
+
+str(clusters_2)
+```
+
+k-means animation with k=4:
+
+```{r}
+
+#install.packages("animation")
+set.seed(2345)
+library(animation)
+kmeans.ani(iris_clust[2:3], 4)
+```
+
