@@ -1,0 +1,453 @@
+---
+title: "hw1_Ganbold_Mungunsarnai"
+author: "Ganbold,MungunSarnai (BMI-MS)"
+date: "9/13/2019"
+output: html_document
+---
+
+## Machine Learning, Homework 1
+
+
+### K-Means Clustering
+
+0. Subset the Iris dataset to only include `Sepal.Length`, `Sepal.Width`, `Petal.Length`, and `Petal.Width`. 
+
+```{r load, include=FALSE}
+# Library update chunck:
+#install.packages("ggplot2")
+library(ggplot2)
+library(tidyverse)
+#install.packages("scales")
+#library(scales)
+#install.packages("ggfortify")
+library(ggfortify)
+#install.packages("fastICA")
+library(fastICA)
+#installed.packages("cluster")
+library(cluster)
+```
+
+
+```{r}
+# Displaying the imbedded in R iris dataset:
+
+data(iris) 
+head(iris)  
+```
+
+
+Setting the 4 attributes to numeric:
+
+```{r}
+
+# We don't have observations with unknown values to be removed here (using filter()).
+# Setting all attributes to numeric at once:
+iris <- iris %>% 
+  mutate(Sepal.Length = as.numeric(iris$Sepal.Length), Sepal.Width = as.numeric(iris$Sepal.Width), Petal.Length = as.numeric(iris$Petal.Length), Petal.Width = as.numeric(iris$Petal.Width)) %>% 
+  as.data.frame()
+
+head(iris)
+```
+
+Sorting out only features columns for unsupervized clustering and trimming off labels column:
+
+```{r}
+# save iris Species as labels and stash it away:
+iris_names <- iris$Species
+#iris_names  # 3 levels
+
+# unlabeling iris dataset for unsupervised clustering:
+iris_clust <- as.data.frame(iris[,-5])  # or iris[, 1:4]
+dim(iris_clust) 
+head(iris_clust)
+```
+
+#### 1. Write out the K-means algorithm by hand, and run two iterations of it.
+
+K-means pseudo-code:
+
+a. Choose k number of clusters you want to split your data into. 
+b. To begin with, randomly assignment the points by k-clusters.
+c. Subset points for each of k-clusters into separate index.
+d. Using Euclidean distance, define which of the existing at this iteration
+   centroid is the closest. Then, assign the observation to that
+   cluster. 
+
+*Implementation of K-means manually:*
+
+```{r}
+# a. Choose number of clusters you want to output:
+k = 2
+n <- nrow(iris_clust) # all observations
+# Note:
+# k <- nrow(iris_clust) - setting is for hierarchical clustering
+
+
+# b. Initial random assignment of the points to the chosen k=2 clusters:
+observation_index <- sample(1:k,size = nrow(iris_clust), replace = T)
+# sample() randomly labels all observations with cluster numbers. All labeled observations stay in one joint matrix (observation_index). 
+# Note:
+# sample(x, size, replace), x is a vector of features to be indexed into clusters. Size is a size of data needed to be labeled/sampled. Replace=T is a choice to return the label back to the label pool.
+
+
+# c. Subsetting labeled data into k clusters:
+#index=1 is MATRIX OF OBSERVATIONS sampled initially into cluster1 :
+index1 <-  iris_clust[observation_index == 1, ]
+#head(index1)
+# index2 is Matrix of observations sampled initially to cluster2:
+index2 <-  iris_clust[observation_index == 2, ]
+#head(index2) 
+
+
+# d. Finding centroid-vector(of p-means) for each of index k (indexed matrices)
+cluster_1_centroid <- apply(index1,2,mean)  # margin=2 for 'columns'. It means comp-ing means for each column of matrix index1
+cluster_2_centroid <- apply(index2,2,mean)
+#Note:margin=1 means rows, margin=c(1,2) indicates rows and columns - outputs are 2 matrices, not vectors. (It is basically vector of mean but with p feautures titles. So, it is a matrix.)
+
+
+# e. Next is re-assignment (re-indexing) of each observation to the closest cluster. 
+# Calculate distances matrix and define which of the existing centroids at this step of clustering is the closest to each observation. 
+ 
+# first is looping to reassign points to the cluster of its closest mean:
+assign_cluster_index <- c()  
+#- ID NEW set of points for each of k cluster 
+# assign_cluster_index is a vector of indexes. It is defining the main classifying function to reassign indexed observations to its closest mean. THe function is formulated below.
+
+for (observation_index in 1:n) 
+  {  # for each of indexed observations in all rows of observations:
+  
+  observation <- iris_clust[observation_index,]  # subset each indexed observation in entire dataset ( incl. all columns). The subset is assigned to the value "observation" now.
+  
+  distance <- c(  # the distance between each observation and each centroid gets measured. Read: 'c(to each of k means)'
+    as.numeric(dist(rbind(observation, cluster_1_centroid),method = "euclidean")),
+    # dist(as matrix(between observation and centroid 1))
+    as.numeric(dist(rbind(observation,cluster_2_centroid),method = "euclidean"))) 
+    # dist(as matrix(between same observation and centroid 2))
+    
+    assign_cluster_index <- c(assign_cluster_index,c(which.min(distance)))
+
+}
+print(assign_cluster_index) # print changed assignments of each observation to the  cluster centroid 
+```
+
+##### Let's compare what we have calculated manually with the results of the built-in kmeans() function in R:
+
+```{r}
+
+R_assign_cluster_index <- kmeans(iris_clust, 2)
+R_assign_cluster_index
+
+```
+
+"Cluster means"= centroids = vectors of means
+"Clustering vector" - assignments for each observation according to this clustering method
+"Within cluster sum of squares within cluster' = within_SS - 
+        - is vector of within-cluster sum of squares (i.e. error for
+        K-means clustering),
+between_SS - the between-cluster sum of squares (i.e. total_SS-tot.within_SS_
+tot.within_SS - total within-cluster sum of squares, i.e. sum(within_SS),
+
+Note:
+The within-cluster sum of squares is a measure of the variability of the observations within each cluster. As the number of observations increases, the sum of squares becomes larger. Therefore, the within-cluster sum of squares is often not directly comparable across clusters with different numbers of observations.
+IN GENERAL, LOWER WITHIN-CLUSTER VARIATION THE MORE COMPACT IS THE CLUSTER
+
+
+*Conclusion:*
+
+k-means clustering output (= assignment of each observation to a cluster centroid ) varies depending on the very initial random values of cluster centers.
+
+
+
+#### 2. Run PCA on the Iris dataset. Plot a scatter plot of PC1 vs PC2 and include the percent variance those PCs describe. 
+
+Principal Components Analysis - linear dimensionality reduction algorithm. PCA has two methods: SVD and Covariance matrix calculations.
+
+Pseudo-algorithm for Covariance matrix calculation:
+
+Step 1. Center data by subtracting the mean.
+Step 2. Calculate Covariance matrix of data.
+Step 3. Perform Eigendecomposition of the covariance matrix. i.e. represent the matrix in terms of its eigenvalues and eigen vectors
+Step 4. Multiply the eigen vectors by the original data to express the data in terms of the eigen vectors. 
+
+
+Implementation of Step 1. 
+
+Center the data by subtracting the mean of the each column from the values in that column
+
+```{r}
+iris_clust_pca <- data.matrix(iris_clust)
+head(iris_clust_pca) 
+
+## looping (by columns/attributes) through each of 150 initial clusters and calculating MATRIX OF DEV of observ.from mean
+Center_iris <- apply(iris_clust_pca, 2, function(x) x - mean(x))  
+## margin=2 meaning 'by column', fun = x-mean(x)
+head(Center_iris) 
+
+```
+
+
+Implementation of Step 2. 
+
+Calculating Covariance matrix (correlation matrix to get PC of features X in dataset):
+
+```{r}
+Covariance_iris <- cov(Center_iris) 
+Covariance_iris
+#dim[p x p]
+```
+
+
+Implementation of Step 3.  
+
+Calculating eigen values and vectors for Eigen/spectral Decomposition of Covariance Matrix (both numeric(double, int, logical) or complex):
+
+```{r}
+
+Eigen_value_iris <- eigen(Covariance_iris)$value
+
+# data attributes/columns are the four vectors (one for each attribute):
+Eigen_vector_iris <- eigen(Covariance_iris)$vector
+
+Eigen_value_iris  # dim [1:4]
+Eigen_vector_iris  # matrix dim [4:4] or [p x p] 
+
+```
+
+Note:
+1. Eigen-/ or spectral- decomposition is the factorization of a matrix where it is represented in terms of its eigenvalues and eigenvectors. 
+    P.S.Only diagonalizable matrices can be factorized in this way (those     which have linearly independent eigenvectors).
+2. A true EVR remains unchanged during linear transformation and provides us with direction for transf. Here are 4 EVR for each of features.
+3. EVL is a factor of transformation, a number, telling us how much VARIANCE there is in the data in that direction, how spread out the data is on the line. Each value is for each vector direction. 
+4. THE EIGENVECTOR WITH THE HIGHEST EVL IS THEREFORE THE PRINCIPAL COMPONENT
+
+
+
+Implementation of Step 4. 
+
+Multiply the four vector matrix by the original data. 
+(Projecting normalized data in p=4 eigen directions).  
+
+```{r}
+# principal component dataframe (PCD):
+PC_iris <- as.data.frame(data.matrix(Center_iris) %*% Eigen_vector_iris)  
+# columns should match
+head(PC_iris)  
+#dim [150, 4] 
+
+```
+
+Plot PC1~PC2: 
+``` {r}
+
+PC_iris$Species <- iris_names  #trimmed and stashed away 'class' from original dataset is added now to PCD for vizualization
+
+ggplot(PC_iris, aes(PC_iris[,1], PC_iris[,2])) +  
+  geom_point(aes(PC_iris[,1], PC_iris[,2], color = iris$Species)) 
+
+#    geom_text(aes(label = iris_names[1:150]), nudge_x = -2.5, nudge_y = 1) ## nudge regulates the hight of the text
+
+```
+
+
+Implementation of Step 5. 
+
+Find out which principal components explain the variance in the data. 
+(For each component, take the cumulative sum of eigen values up to that point and divide by the total sum of eigen values)
+
+```{r}
+round(cumsum(Eigen_value_iris)/sum(Eigen_value_iris) * 100, digits = 2)
+```
+
+
+*Results of the manually performed PCA analysis of iris data using covariance matrix:*
+first component alone explains 92.46% variance in the data, the first two components explain 97.77%, first three components 99.48% and all four together explain all 100% of data variance.
+
+
+* Optional - Variables Factor Map: 
+
+I used variables factor analysis to add more information on interpretation of components1 and 2:
+(I need to find how to layer up PCA plot with factors analysis map)
+
+```{r}
+#install.packages("FactoMineR")
+library(FactoMineR)
+# Compute PCA with ncp = 3 (numb.of components)
+res.pca <- PCA(iris_clust, ncp = 4, graph = T) 
+```
+
+
+##### R has ready-to-use prcomp() function to perform PCA:
+prcomp()uses SVD, not eigen(covarience matrix) as we just did above.
+
+```{r}
+# PCA on normalized cluster data using SVD method
+prcomp(iris_clust_pca) ## list of dev for each feature
+autoplot(prcomp(Center_iris))
+```
+
+*Results of R prcomp() using SVD method match with results of mannualy performed PCA using covarience matrix*: 
+Principal component 1 and 2 explain 97.77 percent of the variance.
+
+
+#### 3.Run ICA on the Iris dataset. 
+ICA  is an algorithm that finds components that are independent subcomponents of the data.
+
+Step 1. Whiten the data (remove underlying correlations) after(/by) projecting the data onto the eigen vectors (->PCA).
+
+Step 2. Solve the X=AS equation by maximizing non-gaussianty in the variables(components) in S. 
+
+This results in a matrix S with components that are independent from each other. 
+(backwards process)
+
+We will use R's fastICA algorithm to calculate S source matrix, which is ICA components: .
+
+```{r}
+
+a <- fastICA(iris_clust, 4, alg.typ = "parallel", fun = "logcosh", alpha = 1,
+             method = "R", row.norm = FALSE, maxit = 10,
+             tol = 0.0001, verbose = TRUE)
+#head(a) # [150:4] ICA components matrix (!with components that are independent from each other).
+
+```
+
+Note about 'unmixing ICA analysis':
+
+INPUT parameters for fastICA():
+4 = p, number of components to be extracted
+alg.type = "parallel" - components are extracted simultaneously (default)
+alg.type = "deflation" - components are extracted one at a time 
+fun = 'logcosh' or 'exp'(forms of G function used in the approx-n to neg.entropy)
+alpha - constant in range [1, 2] used in approximation to neg-entropy when fun == "logcosh"
+row.norm = FALSE - whether rows should be standardized beforehand
+tol - a positive scalar giving the tolerance at which the un-mixing matrix is considered to have converged.
+verbose - a logical value indicating the level of output as the algorithm runs.
+ 
+fastICA() OUTPUT values:
+X: pre-processed data matrix (centr-zed) [n x p]
+K: pre-whitening matrix that projects data onto the first p of PC [p x p]; (X%*%K = PCA Components matrix)
+W: estimated unmixing matrix  [p x p]
+A: estimated mixing matrix [p x p]
+S: estimated source matrix [n x p] ; S matrix is ICA components matrix.
+
+Let's visualize the process of performance of the fastICA algorithm:
+
+```{r}
+par(mfrow = c(1,3))
+plot(a$X, main = "pre-processed data")
+plot(a$X %*% a$K, main = "PCA components")
+plot(a$S, main = "ICA components")
+```
+
+
+##### Plot the independent components as a heatmap:
+
+Heatmap has also a dendogram together with colorscaling for each of independent components:
+
+```{r}
+heatmap_iris <- heatmap(a$S)
+help(heatmap)
+```
+
+
+#### 4. Use Kmeans to cluster the Iris data. 
+* Use the silhouette function in the cluster package to find the optimal number of clusters for kmeans for the iris dataset. Then cluster using kmeans clustering. Does the data cluster by species? 
+  * Using this clustering, color the PCA plot according to the clusters.
+ 
+Finding optimal k for kmeans with silhouette method:
+
+```{r}
+#pkgs <- c("factoextra",  "NbClust")
+#install.packages(pkgs)
+
+library(factoextra)
+library(NbClust)
+
+# Silhouette method
+fviz_nbclust(Center_iris, kmeans, method = "silhouette")+
+  labs(subtitle = "Silhouette method")
+# According to this, optimal number of clusters is 2. 
+```
+
+```{r}
+
+#kmeans with k=2:
+optimum_kmeans <- kmeans(iris_clust, 2)
+optimum_kmeans
+
+# The data is clustered into 2 groups. We do not know from this how the species are represented in these two clusters. we can plot it, though.
+```
+
+PCA of kmeans, k=2 and ploting clustering color according to species:
+
+```{r}
+#PCA:
+Eigen_value_iris <- eigen(Covariance_iris)$value
+Eigen_vector_iris <- eigen(Covariance_iris)$vector
+PC_iris <- as.data.frame(data.matrix(Center_iris) %*% Eigen_vector_iris)  
+# plot PC1 ~ PC2 
+PC_iris$Species <- iris_names  #trimmed and stashed away 'class' from original dataset
+ggplot(PC_iris, aes(PC_iris[,1], PC_iris[,2])) +  #data, OX is 1st column, OY is the 2nd column
+  geom_point(aes(PC_iris[,1], PC_iris[,2], color = iris$Species)) #stashed away 'class' is added back to represent data by species  
+#    geom_text(aes(label = iris_names[1:150]), nudge_x = -2.5, nudge_y = 1) 
+# nudge regulates the hight of the text
+```
+
+
+#### 5. Use hierarchical clustering to cluster the Iris data.
+
+* Try two different linkage types, and two different distance metrics. 
+* For one linkage type and one distance metric, try two different cut points. 
+* Using this clustering, color the PCA plot according to the clusters. (6  plots in total)
+
+```{r}
+#par(mfrow = c(2, 3))
+#Plot 1: Hierarchical Clustering with Eucl.dist method and centroid linkage method for clustering.
+hierarchical_dist1 <- dist(iris_clust, method = "euclidean")
+tree1 <- hclust(hierarchical_dist1, method = "centroid")  
+plot(tree1)
+
+#Plot2: Hierarchical Clustering with Manhattan dist. method and centroid linkage method for clustering.
+#?dist(method)
+hierarchical_dist2 <- dist(iris_clust, method = "manhattan")
+tree2 <- hclust(hierarchical_dist2, method = "centroid")  
+plot(tree2)
+
+#Plot 3: Hierarchical Clustering with Eucl.dist method and complete linkage method for clustering.
+hierarchical_dist3 <- dist(iris_clust, method = "euclidean")
+tree3 <- hclust(hierarchical_dist3, method="complete")  
+plot(tree3)
+
+#Plot4: Hierarchical Clustering with Manhattan dist. method and complete linkage method for clustering.
+hierarchical_dist4 <- dist(iris_clust, method = "manhattan")
+tree4 <- hclust(hierarchical_dist4, method = "complete")  
+plot(tree4)
+
+#Plot5, curoff=2: 
+tree2_k2 <- cutree(tree2, k = 2)  ## cutree() to filter out 2 clusters from the tree
+plot(tree2_k2)
+
+#Plot6, same config., cutoff =4: 
+tree2_k4 <- cutree(tree2, k = 4)  ## cutree() to filter out 2 clusters from the tree
+plot(tree2_k4)
+
+```
+
+
+* Using this clustering, color the PCA plot according to the clusters (use cutree() to ID clusters):
+
+```{r}
+pca_hc <- prcomp(iris_clust_pca) 
+#for coloring dendogram by clusters at certain k level:
+#install.packages("ggbiplot")
+#library(ggbiplot)
+#ggbiplot(pca_hc, groups = factor(tree1)) + xlim(-0.15,0.20)
+```
+
+```{r}
+pca_hc <- prcomp(iris_clust_pca) 
+tree2_k4 <- as.character(tree2_k4)
+ggplot(as.data.frame(pca_hc$x), aes(PC1, PC2, color = tree2_k4)) +
+  geom_point()
+```
+
+Thank you!
